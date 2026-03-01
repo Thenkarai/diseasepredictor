@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="PHASAL — AI Plant Disease Recognition with real-time severity analysis.">
+    <title>AI — Plant Disease Recognition</title>
+    <link rel="icon" href="{{ url_for('static', filename='images/logo.svg') }}" type="image/svg+xml">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=Noto+Sans+Tamil:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+
+<body>
+
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <a class="nav-brand" href="/">
+                <img src="{{ url_for('static', filename='images/logo.svg') }}" alt="Logo" class="nav-logo">
+                <span class="nav-brand-text">Plant Disease Recognition</span>
+            </a>
+            <div class="nav-right">
+                <span class="nav-version">v2.0</span>
+                <span class="nav-divider"></span>
+                <span class="nav-tagline">Plant Health Analysis</span>
+            </div>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <!-- Hero -->
+        <section class="hero">
+            <h1 class="hero-title">Plant Disease <span class="text-accent">Detection</span></h1>
+            <p class="hero-desc">Upload a leaf photo or use your camera for AI-powered disease identification with
+                real-time severity analysis</p>
+            <p class="hero-desc-tamil">இலை புகைப்படம் பதிவேற்றவும் அல்லது கேமரா பயன்படுத்தவும் — AI நோய் கண்டறிதல்</p>
+        </section>
+
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab active" id="tab-upload" onclick="switchTab('upload')"><i class="fas fa-upload"></i>
+                Upload</button>
+            <button class="tab" id="tab-camera" onclick="switchTab('camera')"><i class="fas fa-camera"></i>
+                Camera</button>
+        </div>
+
+        <!-- Upload -->
+        <div class="panel" id="upload-section">
+            <form action="/upload/" method="POST" enctype="multipart/form-data" id="upload-form">
+                <div class="dropzone" id="dropzone">
+                    <div class="dropzone-inner">
+                        <i class="fas fa-cloud-arrow-up dropzone-icon"></i>
+                        <p class="dropzone-text">Drop your leaf image here</p>
+                        <span class="dropzone-hint">or click to browse · JPG, PNG</span>
+                    </div>
+                    <input type="file" accept="image/png, image/jpeg" name="img" id="file-input" required hidden>
+                </div>
+                <div class="preview" id="preview" style="display:none;">
+                    <div class="preview-img-wrap">
+                        <img id="preview-img" src="" alt="Preview">
+                        <button type="button" class="preview-remove" id="remove-btn"><i
+                                class="fas fa-xmark"></i></button>
+                    </div>
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-magnifying-glass"></i>
+                        Analyze</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Camera -->
+        <div class="panel" id="camera-section" style="display:none;">
+            <div class="camera-wrap" id="camera-wrap">
+                <video id="video" autoplay playsinline></video>
+                <canvas id="canvas" style="display:none;"></canvas>
+                <div class="camera-hud">
+                    <span class="hud-live"><i class="fas fa-circle"></i> LIVE</span>
+                </div>
+                <button type="button" class="shutter" onclick="capturePhoto()"><i class="fas fa-camera"></i></button>
+            </div>
+            <div class="preview" id="cam-preview" style="display:none;">
+                <div class="preview-img-wrap">
+                    <img id="captured-img" src="" alt="Captured">
+                    <button type="button" class="preview-remove" onclick="retakePhoto()"><i
+                            class="fas fa-rotate-left"></i></button>
+                </div>
+                <button type="button" class="btn btn-primary" onclick="analyzeCameraPhoto()"><i
+                        class="fas fa-magnifying-glass"></i> Analyze</button>
+            </div>
+            <div class="loader" id="loader" style="display:none;">
+                <div class="spinner"></div><span>Analyzing...</span>
+            </div>
+        </div>
+
+        <!-- Camera Results (AJAX) -->
+        <div id="camera-results"></div>
+
+        <!-- Server Results -->
+        {% if result %}
+        <section class="results" id="results">
+            {% if not is_valid %}
+            <!-- ===== INVALID IMAGE ERROR ===== -->
+            <h2 class="section-title"><i class="fas fa-circle-xmark" style="color:#ff4757"></i> Image Not Recognized
+                <span class="tamil-sub">படம் அடையாளம் காண இயலவில்லை</span>
+            </h2>
+            <div class="report-grid">
+                <div class="card">
+                    <div class="card-head"><i class="fas fa-image"></i> Uploaded Image</div>
+                    <div class="card-img"><img src="{{imagepath}}" alt="Uploaded"></div>
+                </div>
+                <div class="card">
+                    <div class="error-card-inner">
+                        <i class="fas fa-triangle-exclamation error-big-icon"></i>
+                        <h3 class="error-title">Cannot Identify · கண்டுபிடிக்க முடியல</h3>
+                        <p class="error-text">{{error_message}}</p>
+                        <p class="error-tamil">{{error_tamil}}</p>
+                    </div>
+                </div>
+                <div class="card card-wide">
+                    <div class="card-head"><i class="fas fa-leaf"></i> Supported Plants · நாங்க கண்டுபிடிக்கக்கூடிய
+                        செடிகள்</div>
+                    <div class="plants-grid">
+                        {% for p in supported_plants %}
+                        <div class="plant-item">
+                            <span class="plant-emoji">{{p.icon}}</span>
+                            <span class="plant-name">{{p.en}}</span>
+                            <span class="plant-tamil">{{p.ta}}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            <a href="/" class="btn btn-outline"><i class="fas fa-arrow-rotate-left"></i> Try Again · மீண்டும்
+                முயற்சி</a>
+
+            {% else %}
+            <!-- ===== VALID RESULTS ===== -->
+            <h2 class="section-title"><i class="fas fa-clipboard-check"></i> Analysis Report <span
+                    class="tamil-sub">பகுப்பாய்வு அறிக்கை</span></h2>
+
+            {% if confidence < 80 %} <div class="alert alert-warn">
+                <i class="fas fa-triangle-exclamation"></i>
+                <div>
+                    <strong>Low confidence ({{confidence}}%)</strong>
+                    <p>Try a clearer, well-lit photo of the leaf for more accurate results.</p>
+                </div>
+                </div>
+                {% endif %}
+
+                <div class="report-grid">
+                    <!-- Image -->
+                    <div class="card">
+                        <div class="card-head"><i class="fas fa-image"></i> Uploaded Image</div>
+                        <div class="card-img"><img src="{{imagepath}}" alt="Leaf"></div>
+                    </div>
+
+                    <!-- Confidence -->
+                    <div class="card">
+                        <div class="card-head"><i class="fas fa-bullseye"></i> Model Confidence</div>
+                        <div class="gauge-wrap">
+                            <div class="gauge">
+                                <svg viewBox="0 0 200 200">
+                                    <circle cx="100" cy="100" r="85" class="gauge-track" />
+                                    <circle cx="100" cy="100" r="85" class="gauge-bar
+                                    {% if confidence >= 80 %}gauge-high
+                                    {% elif confidence >= 50 %}gauge-mid
+                                    {% else %}gauge-low{% endif %}" stroke-dasharray="534"
+                                        stroke-dashoffset="{{ 534 - (534 * confidence / 100) }}" id="gauge-bar" />
+                                </svg>
+                                <div class="gauge-center">
+                                    <span class="gauge-num" id="gauge-num">{{confidence}}%</span>
+                                    <span class="gauge-sub">confidence</span>
+                                </div>
+                            </div>
+                            <span class="badge
+                            {% if confidence >= 80 %}badge-green
+                            {% elif confidence >= 50 %}badge-yellow
+                            {% else %}badge-red{% endif %}">
+                                {% if confidence >= 80 %}Reliable
+                                {% elif confidence >= 50 %}Moderate
+                                {% else %}Low{% endif %}
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Identification -->
+                    <div class="card card-wide">
+                        <div class="card-head"><i class="fas fa-leaf"></i> Identification <span
+                                class="head-tamil">அடையாளம்</span></div>
+                        <div class="id-row">
+                            <div class="id-chip chip-plant"><i class="fas fa-seedling"></i> {{plant_name}} <span
+                                    class="chip-tamil">{{tamil['plant']}}</span></div>
+                            {% if is_healthy %}
+                            <div class="id-chip chip-healthy"><i class="fas fa-heart"></i> Healthy <span
+                                    class="chip-tamil">ஆரோக்கியமான</span></div>
+                            {% else %}
+                            <div class="id-chip chip-disease"><i class="fas fa-bug"></i> {{disease_name}} <span
+                                    class="chip-tamil">{{tamil['disease']}}</span></div>
+                            {% endif %}
+                        </div>
+                        <div class="info-grid">
+                            <div class="info-block">
+                                <div class="info-icon icon-cause"><i class="fas fa-microscope"></i></div>
+                                <div>
+                                    <span class="info-label">Cause · காரணம்</span>
+                                    <p class="info-text">{{prediction['cause']}}</p>
+                                    <p class="info-tamil">{{tamil['cause']}}</p>
+                                </div>
+                            </div>
+                            <div class="info-block">
+                                <div class="info-icon icon-cure"><i class="fas fa-hand-holding-medical"></i></div>
+                                <div>
+                                    <span class="info-label">Treatment · சிகிச்சை</span>
+                                    <p class="info-text">{{prediction['cure']}}</p>
+                                    <p class="info-tamil">{{tamil['cure']}}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Severity -->
+                    <div class="card card-wide">
+                        <div class="card-head"><i class="fas fa-chart-pie"></i> Disease Severity — Leaf Area Analysis
+                        </div>
+                        {% if is_healthy %}
+                        <div class="severity-ok">
+                            <i class="fas fa-circle-check"></i>
+                            <h3>No Disease Detected</h3>
+                            <p>Leaf tissue appears healthy with no visible signs of infection.</p>
+                        </div>
+                        {% else %}
+                        <div class="severity-data">
+                            <div class="sev-circles">
+                                <div class="sev-circle sev-affected">
+                                    <span class="sev-val" id="sev-val">{{severity}}%</span>
+                                    <span class="sev-label">Affected</span>
+                                </div>
+                                <div class="sev-circle sev-healthy">
+                                    <span class="sev-val">{{(100 - severity)|round(1)}}%</span>
+                                    <span class="sev-label">Healthy</span>
+                                </div>
+                            </div>
+                            <div class="sev-bar-wrap">
+                                <div class="sev-bar-track">
+                                    <div class="sev-bar-fill
+                                    {% if severity >= 60 %}fill-critical
+                                    {% elif severity >= 35 %}fill-high
+                                    {% elif severity >= 15 %}fill-moderate
+                                    {% else %}fill-low{% endif %}" style="--w:{{severity}}%"></div>
+                                </div>
+                                <div class="sev-bar-labels">
+                                    <span>0%</span>
+                                    <span class="sev-status
+                                    {% if severity >= 60 %}text-red
+                                    {% elif severity >= 35 %}text-orange
+                                    {% elif severity >= 15 %}text-yellow
+                                    {% else %}text-green{% endif %}">
+                                        {% if severity >= 60 %}Severe — Immediate treatment needed
+                                        {% elif severity >= 35 %}Significant — Apply treatment soon
+                                        {% elif severity >= 15 %}Moderate — Begin preventive measures
+                                        {% else %}Mild — Early stage, monitor closely{% endif %}
+                                    </span>
+                                    <span>100%</span>
+                                </div>
+                            </div>
+                            <p class="sev-note"><i class="fas fa-info-circle"></i> Severity is calculated by analyzing
+                                the ratio of diseased tissue (spots, lesions, discoloration) to healthy green tissue in
+                                the uploaded leaf image.</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <a href="/" class="btn btn-outline"><i class="fas fa-arrow-rotate-left"></i> Scan Another Leaf</a>
+                {% endif %}
+        </section>
+        {% endif %}
+    </main>
+
+    <footer class="footer"><span>© 2026 PHASAL — AI Plant Disease Recognition</span></footer>
+
+    <script>
+        /* === Tabs === */
+        let stream = null;
+        function switchTab(t) {
+            document.getElementById('tab-upload').classList.toggle('active', t === 'upload');
+            document.getElementById('tab-camera').classList.toggle('active', t === 'camera');
+            document.getElementById('upload-section').style.display = t === 'upload' ? 'block' : 'none';
+            document.getElementById('camera-section').style.display = t === 'camera' ? 'block' : 'none';
+            t === 'camera' ? startCam() : stopCam();
+        }
+
+        /* === Upload === */
+        const dz = document.getElementById('dropzone'), fi = document.getElementById('file-input');
+        const pw = document.getElementById('preview'), pi = document.getElementById('preview-img');
+        dz.addEventListener('click', () => fi.click());
+        ['dragenter', 'dragover'].forEach(e => dz.addEventListener(e, ev => { ev.preventDefault(); dz.classList.add('over'); }));
+        ['dragleave', 'drop'].forEach(e => dz.addEventListener(e, ev => { ev.preventDefault(); dz.classList.remove('over'); }));
+        dz.addEventListener('drop', e => { if (e.dataTransfer.files.length) { fi.files = e.dataTransfer.files; showPrev(e.dataTransfer.files[0]); } });
+        fi.addEventListener('change', () => { if (fi.files.length) showPrev(fi.files[0]); });
+        function showPrev(f) { const r = new FileReader(); r.onload = e => { pi.src = e.target.result; dz.style.display = 'none'; pw.style.display = 'flex'; }; r.readAsDataURL(f); }
+        document.getElementById('remove-btn').addEventListener('click', () => { fi.value = ''; pw.style.display = 'none'; dz.style.display = 'flex'; });
+
+        /* === Camera === */
+        async function startCam() {
+            try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 } } }); document.getElementById('video').srcObject = stream; document.getElementById('camera-wrap').style.display = 'block'; document.getElementById('cam-preview').style.display = 'none'; }
+            catch (e) { alert('Camera not available'); switchTab('upload'); }
+        }
+        function stopCam() { if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; } }
+        function capturePhoto() { const v = document.getElementById('video'), c = document.getElementById('canvas'); c.width = v.videoWidth; c.height = v.videoHeight; c.getContext('2d').drawImage(v, 0, 0); document.getElementById('captured-img').src = c.toDataURL('image/jpeg', 0.9); document.getElementById('camera-wrap').style.display = 'none'; document.getElementById('cam-preview').style.display = 'flex'; }
+        function retakePhoto() { document.getElementById('cam-preview').style.display = 'none'; document.getElementById('camera-wrap').style.display = 'block'; document.getElementById('camera-results').innerHTML = ''; }
+
+        async function analyzeCameraPhoto() {
+            document.getElementById('loader').style.display = 'flex';
+            try {
+                const r = await fetch('/upload-camera/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image: document.getElementById('captured-img').src }) });
+                const d = await r.json(); document.getElementById('loader').style.display = 'none';
+                if (d.success) renderResults(d); else alert('Failed');
+            } catch (e) { document.getElementById('loader').style.display = 'none'; alert(e.message); }
+        }
+
+        function renderResults(d) {
+            const el = document.getElementById('camera-results');
+
+            // === INVALID IMAGE ===
+            if (!d.is_valid) {
+                let plantsHtml = '';
+                if (d.supported_plants) {
+                    d.supported_plants.forEach(p => { plantsHtml += `<div class="plant-item"><span class="plant-emoji">${p.icon}</span><span class="plant-name">${p.en}</span><span class="plant-tamil">${p.ta}</span></div>`; });
+                }
+                el.innerHTML = `<section class="results">
+                    <h2 class="section-title"><i class="fas fa-circle-xmark" style="color:#ff4757"></i> Image Not Recognized</h2>
+                    <div class="report-grid">
+                        <div class="card"><div class="card-head"><i class="fas fa-image"></i> Captured Image</div><div class="card-img"><img src="${d.imagepath}"></div></div>
+                        <div class="card"><div class="error-card-inner"><i class="fas fa-triangle-exclamation error-big-icon"></i><h3 class="error-title">Cannot Identify · கண்டுபிடிக்க முடியல</h3><p class="error-text">${d.error_message}</p><p class="error-tamil">${d.error_tamil}</p></div></div>
+                        <div class="card card-wide"><div class="card-head"><i class="fas fa-leaf"></i> Supported Plants · நாங்க கண்டுபிடிக்கக்கூடிய செடிகள்</div><div class="plants-grid">${plantsHtml}</div></div>
+                    </div>
+                    <button class="btn btn-outline" onclick="retakePhoto();el.innerHTML='';"><i class="fas fa-arrow-rotate-left"></i> Try Again</button>
+                </section>`;
+                el.scrollIntoView({ behavior: 'smooth' });
+                return;
+            }
+
+            // === VALID RESULTS ===
+            const c = d.confidence, s = d.severity, isH = d.is_healthy, tm = d.tamil;
+            const dash = 534 - (534 * c / 100);
+            const gc = c >= 80 ? 'gauge-high' : c >= 50 ? 'gauge-mid' : 'gauge-low';
+            const bc = c >= 80 ? 'badge-green' : c >= 50 ? 'badge-yellow' : 'badge-red';
+            const bl = c >= 80 ? 'Reliable' : c >= 50 ? 'Moderate' : 'Low';
+            const fc = s >= 60 ? 'fill-critical' : s >= 35 ? 'fill-high' : s >= 15 ? 'fill-moderate' : 'fill-low';
+            const tc = s >= 60 ? 'text-red' : s >= 35 ? 'text-orange' : s >= 15 ? 'text-yellow' : 'text-green';
+            const sl = s >= 60 ? 'Severe — Immediate treatment needed' : s >= 35 ? 'Significant — Apply treatment soon' : s >= 15 ? 'Moderate — Begin preventive measures' : 'Mild — Early stage, monitor closely';
+            const lowA = c < 80 ? `<div class="alert alert-warn"><i class="fas fa-triangle-exclamation"></i><div><strong>Low confidence (${c}%)</strong><p>Try a clearer photo.</p></div></div>` : '';
+            const sevHtml = isH ? `<div class="severity-ok"><i class="fas fa-circle-check"></i><h3>No Disease Detected</h3><p>Leaf appears healthy. · இலை ஆரோக்கியமா இருக்கு.</p></div>` : `
+                <div class="severity-data"><div class="sev-circles"><div class="sev-circle sev-affected"><span class="sev-val">${s}%</span><span class="sev-label">Affected · பாதிப்பு</span></div><div class="sev-circle sev-healthy"><span class="sev-val">${(100 - s).toFixed(1)}%</span><span class="sev-label">Healthy · ஆரோக்கியம்</span></div></div>
+                <div class="sev-bar-wrap"><div class="sev-bar-track"><div class="sev-bar-fill ${fc}" style="--w:${s}%"></div></div><div class="sev-bar-labels"><span>0%</span><span class="sev-status ${tc}">${sl}</span><span>100%</span></div></div>
+                <p class="sev-note"><i class="fas fa-info-circle"></i> Severity calculated from actual leaf tissue analysis. · இலை திசு பகுப்பாய்வில் இருந்து கணக்கிடப்பட்டது.</p></div>`;
+            el.innerHTML = `<section class="results"><h2 class="section-title"><i class="fas fa-clipboard-check"></i> Analysis Report <span class="tamil-sub">பகுப்பாய்வு அறிக்கை</span></h2>${lowA}
+                <div class="report-grid">
+                    <div class="card"><div class="card-head"><i class="fas fa-image"></i> Captured Image</div><div class="card-img"><img src="${d.imagepath}"></div></div>
+                    <div class="card"><div class="card-head"><i class="fas fa-bullseye"></i> Model Confidence</div><div class="gauge-wrap"><div class="gauge"><svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="85" class="gauge-track"/><circle cx="100" cy="100" r="85" class="gauge-bar ${gc}" stroke-dasharray="534" stroke-dashoffset="${dash}" id="cam-gb"/></svg><div class="gauge-center"><span class="gauge-num">${c}%</span><span class="gauge-sub">confidence</span></div></div><span class="badge ${bc}">${bl}</span></div></div>
+                    <div class="card card-wide"><div class="card-head"><i class="fas fa-leaf"></i> Identification <span class="head-tamil">அடையாளம்</span></div><div class="id-row"><div class="id-chip chip-plant"><i class="fas fa-seedling"></i> ${d.plant_name} <span class="chip-tamil">${tm.plant}</span></div>${isH ? '<div class="id-chip chip-healthy"><i class="fas fa-heart"></i> Healthy <span class="chip-tamil">ஆரோக்கியமா இருக்கு</span></div>' : `<div class="id-chip chip-disease"><i class="fas fa-bug"></i> ${d.disease_name} <span class="chip-tamil">${tm.disease}</span></div>`}</div><div class="info-grid"><div class="info-block"><div class="info-icon icon-cause"><i class="fas fa-microscope"></i></div><div><span class="info-label">Cause · காரணம்</span><p class="info-text">${d.prediction.cause}</p><p class="info-tamil">${tm.cause}</p></div></div><div class="info-block"><div class="info-icon icon-cure"><i class="fas fa-hand-holding-medical"></i></div><div><span class="info-label">Treatment · சிகிச்சை</span><p class="info-text">${d.prediction.cure}</p><p class="info-tamil">${tm.cure}</p></div></div></div></div>
+                    <div class="card card-wide"><div class="card-head"><i class="fas fa-chart-pie"></i> Disease Severity <span class="head-tamil">நோய் தீவிரம்</span></div>${sevHtml}</div>
+                </div><button class="btn btn-outline" onclick="retakePhoto();document.getElementById('camera-results').innerHTML='';"><i class="fas fa-arrow-rotate-left"></i> Scan Another Leaf</button></section>`;
+            el.scrollIntoView({ behavior: 'smooth' });
+            const gb = document.getElementById('cam-gb'); if (gb) { const t = parseFloat(gb.getAttribute('stroke-dashoffset')); gb.style.strokeDashoffset = '534'; setTimeout(() => { gb.style.transition = 'stroke-dashoffset 1.2s ease-out'; gb.style.strokeDashoffset = t; }, 100); }
+        }
+
+        /* === Gauge Anim === */
+        const gb = document.getElementById('gauge-bar');
+        if (gb) { const t = parseFloat(gb.getAttribute('stroke-dashoffset')); gb.style.strokeDashoffset = '534'; setTimeout(() => { gb.style.transition = 'stroke-dashoffset 1.2s ease-out'; gb.style.strokeDashoffset = t; }, 200); }
+        const gn = document.getElementById('gauge-num');
+        if (gn) { const tv = parseFloat(gn.textContent), st = performance.now(); (function a(ct) { const p = Math.min((ct - st) / 1200, 1); gn.textContent = (p * (2 - p) * tv).toFixed(1) + '%'; if (p < 1) requestAnimationFrame(a); })(st); }
+        const rs = document.getElementById('results');
+        if (rs) setTimeout(() => rs.scrollIntoView({ behavior: 'smooth' }), 400);
+    </script>
+</body>
+
+</html>
