@@ -1,0 +1,13 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+Flask = "==3.0.0"
+numpy = "==1.26.4"
+tensorflow-cpu = "==2.15.0"
+opencv-python-headless = "==4.9.0.80"
+
+[requires]
+python_version = "3.11"
