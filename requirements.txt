@@ -2,3 +2,6 @@ Flask==3.0.0
 numpy==1.26.4
 tensorflow-cpu==2.15.0
 opencv-python-headless==4.9.0.80
+Flask-SQLAlchemy==3.1.1
+gunicorn==21.2.0
+matplotlib==3.8.3

@@ -1,4 +1,6 @@
 from flask import Flask, render_template, request, redirect, send_from_directory, url_for, jsonify
+from flask_sqlalchemy import SQLAlchemy
+from datetime import datetime
 import numpy as np
 import json
 import uuid
@@ -6,9 +8,36 @@ import os
 import base64
 import cv2
 import tensorflow as tf
+import logging
 
 app = Flask(__name__)
-model = tf.keras.models.load_model("models/plant_disease_recog_model_pwp.keras")
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///predictions.db')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
+
+class PredictionHistory(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    image_path = db.Column(db.String(255), nullable=False)
+    plant_name = db.Column(db.String(100), nullable=False)
+    disease_name = db.Column(db.String(100), nullable=False)
+    confidence = db.Column(db.Float, nullable=False)
+    severity = db.Column(db.Float, nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+with app.app_context():
+    db.create_all()
+
+# Robust model loading
+model = None
+try:
+    model_path = "models/plant_disease_recog_model_pwp.keras"
+    if os.path.getsize(model_path) < 1000:
+        logging.warning(f"Model file {model_path} is suspiciously small ({os.path.getsize(model_path)} bytes). It might be a Git LFS pointer.")
+    model = tf.keras.models.load_model(model_path)
+    logging.info("Successfully loaded CNN model.")
+except Exception as e:
+    logging.error(f"Failed to load model from {model_path}. Error: {e}")
+    logging.warning("App will run, but predictions will fail until a valid model is provided.")
 
 label = [
     'Apple___Apple_scab',
@@ -259,6 +288,20 @@ def model_predict(image):
             'error_tamil': 'இந்த படத்தில இலை இருக்க மாதிரி தெரியல. தயவுசெய்து ஒரு இலையோட படத்தை போடுங்க.',
         }
 
+    if model is None:
+        return {
+            'prediction': None,
+            'confidence': 0,
+            'plant_name': '',
+            'disease_name': '',
+            'is_healthy': False,
+            'severity': 0.0,
+            'tamil': {'plant': '', 'disease': '', 'cause': '', 'cure': ''},
+            'is_valid': False,
+            'error_message': 'Model is not loaded. Please ensure the model file exists and is not corrupted.',
+            'error_tamil': 'மாடல் லோட் ஆகல. மாடல் பைல் இருக்கான்னு செக் பண்ணுங்க.',
+        }
+
     try:
         img = extract_features(image)
         prediction = model.predict(img)
@@ -335,6 +378,17 @@ def uploadimage():
 
         result = model_predict(f'./{filepath}')
 
+        if result['is_valid']:
+            new_pred = PredictionHistory(
+                image_path=f'/{filepath}',
+                plant_name=result['plant_name'],
+                disease_name=result['disease_name'],
+                confidence=result['confidence'],
+                severity=result['severity']
+            )
+            db.session.add(new_pred)
+            db.session.commit()
+
         return render_template(
             'home.html',
             result=True,
@@ -373,6 +427,17 @@ def upload_camera():
         f.write(img_bytes)
 
     result = model_predict(f'./{filepath}')
+
+    if result['is_valid']:
+        new_pred = PredictionHistory(
+            image_path=f'/{filepath}',
+            plant_name=result['plant_name'],
+            disease_name=result['disease_name'],
+            confidence=result['confidence'],
+            severity=result['severity']
+        )
+        db.session.add(new_pred)
+        db.session.commit()
 
     return jsonify({
         'success': True,
